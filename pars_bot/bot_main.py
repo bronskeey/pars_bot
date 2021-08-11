@@ -10,7 +10,7 @@ from pars_main import pars_rcoi
 import threading
 
 #@pypeer_bot
-token  = '1415917747:AAEgXuF8mmYGFUBaVbou0_eVQwzBvFnrFQM'
+token  =  
 bot    = telebot.TeleBot(token)
 logger = telebot.logger
 telebot.logger.setLevel(logging.DEBUG) 
