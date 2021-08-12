@@ -74,7 +74,9 @@ class pars_rcoi(object):
 
 
 	def new_files(self):
-
+		"""
+		 - maybe it should be a class
+		"""
 		def main(self):
 			diff_indexes = check_new_files(self)
 			if diff_indexes:
@@ -82,6 +84,11 @@ class pars_rcoi(object):
 				dump_file_list(self)
 
 		def check_new_files(self):
+			"""
+			- checking if there's new files on a page
+
+			-returns: list of indexes
+			"""
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [IN] {inspect.stack()[0][3]}')
 			prev_file_list = get_previous_file_list(self)
 			diff           = [x for x in self.docs_list if x not in prev_file_list]
@@ -93,6 +100,12 @@ class pars_rcoi(object):
 			return indexes
 
 		def get_previous_file_list(self):
+			"""
+			- looking for a file in ./file_lists/ directory
+			   with file list in it
+
+			-returns: file list
+			"""
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [IN] {inspect.stack()[0][3]}')
 			PATH      = f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}.txt'
 			if not os.path.exists(PATH):
@@ -106,6 +119,9 @@ class pars_rcoi(object):
 			return file_list
 
 		def dump_file_list(self):
+			"""
+			- creating data file in ./file_lists/ directory
+			"""
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [IN] {inspect.stack()[0][3]}')
 			with open(f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}.txt', "w", encoding="utf-8") as txt_file:
 				for i,line in enumerate(self.docs_list):
@@ -117,6 +133,9 @@ class pars_rcoi(object):
 		print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [OUT] {inspect.stack()[0][3]}')
 
 	def changed_files(self):
+		"""
+		 - maybe it should be a class
+		"""
 		def main(self):
 			diff_indexes = check_modified_files(self)
 			if diff_indexes:
@@ -125,11 +144,11 @@ class pars_rcoi(object):
 
 		def check_modified_files(self):
 			"""
-			 - checking if there's a file on a web page before
+			- checking if there's a file on a web page before
 			   comparing last modified data by comparing dicts
-			 - checking the diff. of last modified data
+			- checking the diff. of last modified data
 
-			 - returns: list of indexes
+			- returns: list of indexes
 			"""
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [IN] {inspect.stack()[0][3]}')
 			prev_dict           = get_prev_modified_files(self)
@@ -145,6 +164,12 @@ class pars_rcoi(object):
 			return indexes
 
 		def get_prev_modified_files(self):
+			"""
+			- looking for a file in ./file_lists/ directory
+			   with last modified data in it
+
+			-returns: dictionary with last modified data
+			"""
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [IN] {inspect.stack()[0][3]}')
 			PATH = f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}_LM.txt'
 			if not os.path.exists(PATH):
@@ -157,6 +182,9 @@ class pars_rcoi(object):
 			return data	
 
 		def dump_LM_list(self):
+			"""
+			- creating data file in ./file_lists/ directory
+			"""
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [IN] {inspect.stack()[0][3]}')
 			with open(f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}_LM.txt', "w") as txt_file:
 				data = str(self.docs_last_m)
@@ -195,10 +223,6 @@ class pars_rcoi(object):
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] [INFO] File #{i+1} downloaded!')
 
 if __name__ == '__main__':
-	# pars_object = pars_rcoi('http://rcoi.mcko.ru/organizers/info/gia-11/')
-	# pars_object.get_info()
-	# t = vars(pars_object)
-	# print(t)
 	urls_organizers = ['http://rcoi.mcko.ru/organizers/info/gia-11/', 'http://rcoi.mcko.ru/organizers/info/gia-9/']
 	urls_methodolog = ['http://rcoi.mcko.ru/organizers/methodological-materials/ege/', 'http://rcoi.mcko.ru/organizers/methodological-materials/gia-9/']
 	urls = urls_organizers + urls_methodolog
