@@ -9,12 +9,12 @@ from datetime import datetime
 from pars_main import pars_rcoi
 import threading
 
+from config import my_pi, my_id
 #@pypeer_bot
-token  =  
+token = my_pi
 bot    = telebot.TeleBot(token)
 logger = telebot.logger
-telebot.logger.setLevel(logging.DEBUG) 
-my_id  = '107579649'
+telebot.logger.setLevel(logging.DEBUG)
 urls_organizers = ['http://rcoi.mcko.ru/organizers/info/gia-11/', 'http://rcoi.mcko.ru/organizers/info/gia-9/'] #
 urls_methodolog = ['http://rcoi.mcko.ru/organizers/methodological-materials/ege/', 'http://rcoi.mcko.ru/organizers/methodological-materials/gia-9/']
 urls = urls_organizers + urls_methodolog
@@ -27,9 +27,9 @@ def start_command(message):
     """
      - calling 'welcome' function for the list of commands
     """
-    welcome(message.chat.id, 0)
+    welcome(message.chat.id)
 
-def welcome(id_c, id_m):
+def welcome(id_c):
     start_string =\
         f"/start - Show main menu\n"+\
         f"/pars  - Start RCOI parser\n"+\
@@ -137,13 +137,4 @@ def save_csv(message):
         bot.send_message(my_id, f'New feedback!')
         bot.send_message(message.from_user.id, f'Thank you!')
 
-
-# def test_function(message):
-#     empty_text = '*' * 25 + \
-#      '\nNo new updates!\n' + \
-#      '*' * 25
-#     t = None
-#     status = empty_text if t == '' else 7
-#     bot.send_message(message.chat.id,text = status)
-#     threading.Timer(10, test_function, args=[message,]).start()
 bot.polling(none_stop=True)
