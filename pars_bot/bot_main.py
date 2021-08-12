@@ -137,13 +137,4 @@ def save_csv(message):
         bot.send_message(my_id, f'New feedback!')
         bot.send_message(message.from_user.id, f'Thank you!')
 
-
-# def test_function(message):
-#     empty_text = '*' * 25 + \
-#      '\nNo new updates!\n' + \
-#      '*' * 25
-#     t = None
-#     status = empty_text if t == '' else 7
-#     bot.send_message(message.chat.id,text = status)
-#     threading.Timer(10, test_function, args=[message,]).start()
 bot.polling(none_stop=True)
