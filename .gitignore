@@ -1,6 +1,8 @@
 # Custom
-.idea/
+idea/
 config.py
+temp.py
+test.py
 
 
 # Byte-compiled / optimized / DLL files

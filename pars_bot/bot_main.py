@@ -22,14 +22,24 @@ urls = urls_organizers + urls_methodolog
 # REPEAT PARSE EVERY 'P_HOUR' HOURS
 P_HOUR = 24
 
+# TODO: separate this thing into two files
+# TODO: impement creating file lists w/o running the bot
+
 @bot.message_handler(commands=['start'])
 def start_command(message):
     """
+    TODO: do not do that, implement basic start behaviour
+    TODO: create list of commands in bot
+
      - calling 'welcome' function for the list of commands
     """
     welcome(message.chat.id)
 
 def welcome(id_c):
+    """
+    TODO: put this in a help command
+
+    """
     start_string =\
         f"/start - Show main menu\n"+\
         f"/pars  - Start RCOI parser\n"+\
@@ -51,7 +61,12 @@ def pars_command(message):
         bot.reply_to(message, text="Sorry, you don't have enough rigths to do this!")
         print(f'{message.from_user.id} tried to start the parser')
 
+
 def start_pars(message):
+    """
+    Idk what is going on here
+
+    """
     for url in urls:
         pars_object = pars_rcoi(url)
         pars_object.get_info()
@@ -80,10 +95,14 @@ def start_pars(message):
 
     threading.Timer(P_HOUR * 60 * 60, start_pars, args=[message, ]).start()
 
+# TODO: everything below this line is not needed
+
 
 @bot.message_handler(commands=['random'])
 def random_command(message):
     """
+    TODO: delete this
+
      - getting random number from 'get_random' function,
        sending it back to chat.
     """
