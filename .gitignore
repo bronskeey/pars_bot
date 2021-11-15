@@ -1,5 +1,5 @@
 # Custom
-idea/
+.idea/
 config.py
 temp.py
 test.py
@@ -134,3 +134,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+*.pdf
+*.docx
+*.xlsx
