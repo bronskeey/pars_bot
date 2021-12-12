@@ -1,4 +1,5 @@
 # Custom
+test/
 .idea/
 config.py
 temp.py
