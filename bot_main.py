@@ -65,14 +65,11 @@ def pars_command(message):
 
 
 def start_pars(message):
-    status = ''
     for url in urls:
-
         main_obj = Pars_Get_Info(url)
-
         for obj in [Pars_New_Files(main_obj),Pars_Changed_Files(main_obj)]:
             obj.get_previous_file_list()
-            obj.check_difference()
+            if obj.prev_file_list: obj.check_difference()
             if obj.indexes:
                 get_new_files = Downloader(obj)
                 obj.dump_file_list()
@@ -85,13 +82,12 @@ def start_pars(message):
                         with open(data_dir + file, 'rb') as f:
                             bot.send_document(message.chat.id, f)
                             get_new_files.bot_status = ''
-                    except Exception as e:
+                    except Exception:
                         bot.send_message(message.chat.id, text="Something went wrong. I can't send you the files.")
             elif obj.bot_status == '':
                 empty_text = f'{obj.data["section"]}, {obj.data["grade"]}\n' + \
                              f'{obj.diff_type}' + \
-                             '\nНет обновлений!\n\n' + \
-                             '*' * 25
+                             '\nНет обновлений!\n\n'
                 status = empty_text
                 bot.send_message(message.chat.id, text=status, disable_notification=True)
 

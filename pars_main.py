@@ -1,6 +1,4 @@
 # coding: utf-8
-import inspect
-
 from bs4 import BeautifulSoup
 from random import uniform, randint
 from datetime import date
@@ -10,13 +8,14 @@ import time
 import ast
 from tqdm import tqdm
 
+# TODO: redo dumper
 
 class Pars_Get_Info(object):
 	def __init__(self, url_):
 		"""
 		looking for 'p' and 'li' bc of 'gia-11' page which uses 'li'
 
-		TODO: redo dumper
+		TODO: do this thing need MAIN_NAME and MAIN_TYPE at all?
 		"""
 		self.MAIN_NAME = url_.split('/')[-2]
 		self.MAIN_TYPE = url_.split('/')[-3][:4]
@@ -41,9 +40,7 @@ class Pars_Get_Info(object):
 		- 'requests.get(link_full_url)' works very slow for music files on a 'gia-9' page
 		   so I won't check 'last-modified' for 'BAD_EXTENSIONS' files
 		   bc RCOI won't modify music files
-		- maybe '/n' replacing is not needed at the end
 		"""
-
 		for raw_link in tqdm(self.divs):
 			if self.link_checker(raw_link):
 				link_href      = raw_link.find_all('a')[0].get('href')
@@ -72,17 +69,6 @@ class Pars_Get_Info(object):
 			return True
 		return False
 
-	def dump_file_lists(self):
-		Pars_New_Files(self).dump_file_list()
-		Pars_Changed_Files(self).dump_LM_list()
-
-	def full_check(self):
-		new_checker = Pars_New_Files(self)
-		new_checker.check()
-
-		changed_checker = Pars_Changed_Files(self)
-		changed_checker.check()
-
 
 class Pars_New_Files(object):
 	def __init__(self, obj):
@@ -97,19 +83,17 @@ class Pars_New_Files(object):
 		self.bot_status = obj.bot_status
 		self.diff_type = 'Новые:'
 
-
 	def get_previous_file_list(self):
 		"""
 		Looking for a list of files in ./file_lists/ directory
 		Updating self.prev_file_list
-
 		"""
 		PATH = f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}.txt'
 		if not os.path.exists(PATH):
-			self.dump_file_list()
-			self.prev_file_list = None
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] File list not found!')
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Creating a file list..')
+			self.dump_file_list()
+			self.prev_file_list = None
 		else:
 			with open(PATH, 'r', encoding="utf-8") as txt_file:
 				self.prev_file_list = [x.strip() for x in txt_file.readlines()]
@@ -145,9 +129,8 @@ class Pars_Changed_Files(object):
 		self.docs_links = obj.docs_links
 		self.docs_og_names = obj.docs_og_names
 		self.indexes = None
-		self.prev_modified_files = None
+		self.prev_file_list = None
 		self.data = obj.info
-
 		self.bot_status = obj.bot_status
 		self.docs_last_m = obj.docs_last_m
 		self.diff_type = 'Изменены:'
@@ -160,13 +143,13 @@ class Pars_Changed_Files(object):
 		"""
 		PATH = f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}_LM.txt'
 		if not os.path.exists(PATH):
-			self.dump_LM_list()
-			self.prev_modified_files = None
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] "Last modified" data not found!')
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Creating "last modified" data..')
+			self.dump_file_list()
+			self.prev_file_list = None
 		else:
 			with open(PATH, "r") as text_file:
-				self.prev_modified_files = ast.literal_eval(text_file.read())
+				self.prev_file_list = ast.literal_eval(text_file.read())
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] "Last modified" data found!')
 
 	def check_difference(self):
@@ -176,13 +159,10 @@ class Pars_Changed_Files(object):
 		- checking the diff. of last modified data
 		"""
 		current_dict = self.docs_last_m
-		prev_dict = {name: date for name, date in self.prev_modified_files.items() if name in current_dict}
-
+		prev_dict = {name: date_ for name, date_ in self.prev_file_list.items() if name in current_dict}
 		fresh_modified_files = prev_dict.items() ^ current_dict.items()
-		fresh_modified_files_names = set([name for name, date in fresh_modified_files])
-
+		fresh_modified_files_names = set([name for name, date_ in fresh_modified_files])
 		self.indexes = [self.docs_og_names.index(name) for name in fresh_modified_files_names]
-
 		if fresh_modified_files:
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Found modified files!')
 		else:
@@ -223,14 +203,4 @@ class Downloader(object):
 				response = requests.get(self.docs_links[i])
 				new_file.write(response.content)
 			self.bot_status += f'{i+1}. {self.docs_list[i]} - {self.docs_og_names[i]}\n'
-
 			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] File #{i + 1} downloaded!')
-
-if __name__ == '__main__':
-	urls_organizers = ['http://rcoi.mcko.ru/organizers/info/gia-11/', 'http://rcoi.mcko.ru/organizers/info/gia-9/']
-	urls_methodolog = ['http://rcoi.mcko.ru/organizers/methodological-materials/ege/', 'http://rcoi.mcko.ru/organizers/methodological-materials/gia-9/']
-	urls = urls_organizers + urls_methodolog
-	for url in urls:
-		data = Pars_Get_Info(url)
-		data.get_info()
-		data.full_check()
