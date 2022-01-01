@@ -1,0 +1,6 @@
+requests~=2.26.0
+beautifulsoup4~=4.10.0
+tqdm~=4.62.3
+pyTelegramBotAPI~=4.2.0
+lxml~=4.6.4
+schedule~=1.1.0

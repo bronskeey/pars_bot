@@ -1,206 +1,247 @@
 # coding: utf-8
-from bs4 import BeautifulSoup
 from random import uniform, randint
+from log.logging_module import *
+from bs4 import BeautifulSoup
 from datetime import date
 import requests
 import os.path
 import time
 import ast
-from tqdm import tqdm
+from tqdm import tqdm # для дебаггинга, можно выключить
 
-# TODO: redo dumper
+pars_logger = Module_Logger(logging.getLogger(__name__))
+
+# TODO: добавить весь раздел "Организаторам"
+urls_organizers = ['http://rcoi.mcko.ru/organizers/info/gia-11/', 'http://rcoi.mcko.ru/organizers/info/gia-9/'] #
+urls_methodolog = ['http://rcoi.mcko.ru/organizers/methodological-materials/ege/', 'http://rcoi.mcko.ru/organizers/methodological-materials/gia-9/']
+urls = urls_organizers + urls_methodolog
 
 class Pars_Get_Info(object):
-	def __init__(self, url_):
-		"""
-		looking for 'p' and 'li' bc of 'gia-11' page which uses 'li'
+    def __init__(self, url_):
+        """
+        Создаёт объект супа.
+        Ищет теги <p> и <li> по страницам, последний из-за страницы с ЕГЭ.
+        Запускает метод .get_info() для скрепинга данных.
+        """
+        self.docs_list = []
+        self.docs_links = []
+        self.docs_og_names = []
+        self.docs_last_m = dict()
+        self.BAD_EXTENSIONS = ['wav','mp3', 'ru']
+        self.bot_status = ''
+        self.last_dir = ''
 
-		TODO: do this thing need MAIN_NAME and MAIN_TYPE at all?
-		"""
-		self.MAIN_NAME = url_.split('/')[-2]
-		self.MAIN_TYPE = url_.split('/')[-3][:4]
-		self.docs_list = []
-		self.docs_links = []
-		self.docs_og_names = []
-		self.docs_last_m = dict()
-		self.BAD_EXTENSIONS = ['wav','mp3', 'ru']
-		self.bot_status = ''
-		self.last_dir = ''
+        response = requests.get(url_)
+        soup = BeautifulSoup(response.text, 'lxml')
+        self.divs = soup.find('div', class_='typicaltext').find_all(['p','li'])
 
-		response = requests.get(url_)
-		soup = BeautifulSoup(response.text, 'lxml')
-		self.divs = soup.find('div', class_='typicaltext').find_all(['p','li'])
-		section = soup.find('h1', class_='pagetitle').text
-		grade = soup.find('li', class_='selected active').find('a').text
-		self.info = {'section':section, 'grade':grade}
-		self.get_info()
+        section = soup.find('h1', class_='pagetitle').text
+        grade = soup.find('li', class_='selected active').find('a').text
+        self.info = {'section':section, 'grade':grade}
+        pars_logger.logger.info(f'{self.info["section"]}-{self.info["grade"]} - Инициализация.')
+        self.get_info()
 
-	def get_info(self):
-		"""
-		- 'requests.get(link_full_url)' works very slow for music files on a 'gia-9' page
-		   so I won't check 'last-modified' for 'BAD_EXTENSIONS' files
-		   bc RCOI won't modify music files
-		"""
-		for raw_link in tqdm(self.divs):
-			if self.link_checker(raw_link):
-				link_href      = raw_link.find_all('a')[0].get('href')
-				link_full_url  = 'http://rcoi.mcko.ru' + link_href
-				link_file_name = link_href.split('/')[-1].strip()
-				link_file_ext  = link_file_name.split('.')[-1]
-				if link_file_ext not in self.BAD_EXTENSIONS:
-					full_link_response = requests.get(link_full_url)
-					link_last_modified = full_link_response.headers.get('Last-Modified', False)
-				else:
-					link_last_modified = 0
-				self.docs_list.    append(raw_link.text.strip().replace('\n',''))
-				self.docs_links.   append(link_full_url.strip())
-				self.docs_og_names.append(link_file_name)
-				self.docs_last_m[link_file_name] = link_last_modified
+    def get_info(self):
+        """
+        Анализирует все объекты на "подходящесть", заполняет все данные по файлам.
+        Часть кода с 'requests.get(link_full_url)' работает очень медленно для музыкальных файлов
+            инструкций, поэтому созданы 'BAD_EXTENSIONS'. Для них не проверяем дату изменения.
+            Музыкальные файлы вряд ли будут изменять.
+        """
+        pars_logger.logger.info(f'{self.info["section"]}-{self.info["grade"]} - Собираем данные.')
+        for raw_link in tqdm(self.divs): # tqdm используется для дебаггинга
+            if self.link_checker(raw_link):
+                link_href      = raw_link.find_all('a')[0].get('href')
+                link_full_url  = 'http://rcoi.mcko.ru' + link_href
+                link_file_name = link_href.split('/')[-1].strip()
+                link_file_ext  = link_file_name.split('.')[-1]
+                if link_file_ext not in self.BAD_EXTENSIONS:
+                    full_link_response = requests.get(link_full_url)
+                    link_last_modified = full_link_response.headers.get('Last-Modified', False)
+                else:
+                    link_last_modified = 0
+                self.docs_list.    append(raw_link.text.strip().replace('\n',''))
+                self.docs_links.   append(link_full_url.strip())
+                self.docs_og_names.append(link_file_name)
+                self.docs_last_m[link_file_name] = link_last_modified
 
-	def link_checker(self, raw_link):
-		"""
-		this thing checking if link is good for us to analyze it.
-		page containg several bad links etc.
-		"""
-		link_A           = raw_link.find_all('a')
-		doc_name         = raw_link.text.strip()
-		link_descendants = [desc.name for desc in raw_link.descendants if desc.name is not None]
-		if (len(link_A) == 1) and ('a' in link_descendants) and (doc_name not in self.docs_list) and ("dwnico" in str(link_A)):
-			return True
-		return False
+    def link_checker(self, raw_link):
+        """
+        Проверяет каждый объект: есть ли иконка скачивания, есть ли один <a> для ссылки на файл.
+        Часть с 'doc_name not in self.docs_list' тут из-за некоторых файлов, которые на странице
+            больше одного раза в каком-нибудь закоменченом блоке.
+        """
+        link_A           = raw_link.find_all('a')
+        doc_name         = raw_link.text.strip()
+        link_descendants = [desc.name for desc in raw_link.descendants if desc.name is not None]
+        if (len(link_A) == 1) and ('a' in link_descendants) and (doc_name not in self.docs_list) and ("dwnico" in str(link_A)):
+            return True
+        return False
 
 
 class Pars_New_Files(object):
-	def __init__(self, obj):
-		self.MAIN_NAME = obj.MAIN_NAME
-		self.MAIN_TYPE = obj.MAIN_TYPE
-		self.docs_list = obj.docs_list
-		self.docs_links = obj.docs_links
-		self.docs_og_names = obj.docs_og_names
-		self.indexes = None
-		self.prev_file_list = None
-		self.data = obj.info
-		self.bot_status = obj.bot_status
-		self.diff_type = 'Новые:'
+    def __init__(self, obj):
+        self.docs_list = obj.docs_list
+        self.docs_links = obj.docs_links
+        self.docs_og_names = obj.docs_og_names
+        self.indexes = None
+        self.prev_file_list = None
+        self.data = obj.info
+        self.bot_status = obj.bot_status
+        self.diff_type = 'Новые:'
+        pars_logger.logger.debug(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Инициализация ')
 
-	def get_previous_file_list(self):
-		"""
-		Looking for a list of files in ./file_lists/ directory
-		Updating self.prev_file_list
-		"""
-		PATH = f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}.txt'
-		if not os.path.exists(PATH):
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] File list not found!')
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Creating a file list..')
-			self.dump_file_list()
-			self.prev_file_list = None
-		else:
-			with open(PATH, 'r', encoding="utf-8") as txt_file:
-				self.prev_file_list = [x.strip() for x in txt_file.readlines()]
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] File list found!')
+    def get_previous_file_list(self):
+        """
+        Ищет файл в папке ./file_lists/ с списком файлов.
+        Если не находит, сохраняет текущий список файлов в такой файл.
+        """
 
-	def check_difference(self):
-		"""
-		Checking if there's new files on a page
-		Updating self.indexes
-		"""
-		new_files = [x for x in self.docs_list if x not in self.prev_file_list]
-		self.indexes = [self.docs_list.index(d) for d in new_files]
-		if new_files:
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Found new files!')
-		else:
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] No new files!')
+        pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Ищем список файлов ')
+        PATH = f'./file_lists/{self.data["section"]}_{self.data["grade"]}.txt'
+        if not os.path.exists(PATH):
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Список файлов не найден!')
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Создаю список файлов')
+            self.dump_file_list()
+            self.prev_file_list = None
+        else:
+            with open(PATH, 'r', encoding="utf-8") as txt_file:
+                self.prev_file_list = [x.strip() for x in txt_file.readlines()]
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Список файлов найден!')
 
-	def dump_file_list(self):
-		"""
-		Creating a .txt data file in ./file_lists/ directory
-		"""
-		with open(f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}.txt', "w", encoding="utf-8") as txt_file:
-			for i,line in enumerate(self.docs_list):
-				txt_file.write(line+'\n')
-		print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] File list dumped')
+    def check_difference(self):
+        """
+        Сверяет список файлов с сайта с данными, сохраненными локально.
+        Обновляет self.indexes номерами новых файлов.
+        """
+        new_files = [x for x in self.docs_list if x not in self.prev_file_list]
+        self.indexes = [self.docs_list.index(d) for d in new_files]
+        if new_files:
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - На странице найдены новые файлы!')
+        else:
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - На странице не найдено новых файлов!')
+
+    def dump_file_list(self):
+        """
+        Создаёт текстовый файл с списком файлов со страницы.
+        """
+        with open(f'./file_lists/{self.data["section"]}_{self.data["grade"]}.txt', "w", encoding="utf-8") as txt_file:
+            for i,line in enumerate(self.docs_list):
+                txt_file.write(line+'\n')
+        pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Список файлов сохранен.')
 
 
 class Pars_Changed_Files(object):
-	def __init__(self, obj):
-		self.MAIN_NAME = obj.MAIN_NAME
-		self.MAIN_TYPE = obj.MAIN_TYPE
-		self.docs_list = obj.docs_list
-		self.docs_links = obj.docs_links
-		self.docs_og_names = obj.docs_og_names
-		self.indexes = None
-		self.prev_file_list = None
-		self.data = obj.info
-		self.bot_status = obj.bot_status
-		self.docs_last_m = obj.docs_last_m
-		self.diff_type = 'Изменены:'
+    def __init__(self, obj):
+        self.docs_list = obj.docs_list
+        self.docs_links = obj.docs_links
+        self.docs_og_names = obj.docs_og_names
+        self.indexes = None
+        self.prev_file_list = None
+        self.data = obj.info
+        self.bot_status = obj.bot_status
+        self.docs_last_m = obj.docs_last_m
+        self.diff_type = 'Изменены:'
+        pars_logger.logger.debug(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Инициализация ')
 
 
-	def get_previous_file_list(self):
-		"""
-		Looking for a file in ./file_lists/ directory with last modified data in it.
-		Updates dictionary with last modified data.
-		"""
-		PATH = f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}_LM.txt'
-		if not os.path.exists(PATH):
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] "Last modified" data not found!')
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Creating "last modified" data..')
-			self.dump_file_list()
-			self.prev_file_list = None
-		else:
-			with open(PATH, "r") as text_file:
-				self.prev_file_list = ast.literal_eval(text_file.read())
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] "Last modified" data found!')
+    def get_previous_file_list(self):
+        """
+        Ищет файл в папке ./file_lists/ с данными дат изменения файлов.
+        Если не находит, сохраняет текущие данные с сайта в такой файл.
+        """
+        pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Ищем даты изменения файлов')
+        PATH = f'./file_lists/{self.data["section"]}_{self.data["grade"]}_LM.txt'
+        if not os.path.exists(PATH):
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Данные не найдены!')
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Создаю файл с данными дат изменения файлов')
+            self.dump_file_list()
+            self.prev_file_list = None
+        else:
+            with open(PATH, "r") as text_file:
+                self.prev_file_list = ast.literal_eval(text_file.read())
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Данные найдены!')
 
-	def check_difference(self):
-		"""
-		- checking if there's a file on a web page before
-		   comparing last modified data by comparing dicts
-		- checking the diff. of last modified data
-		"""
-		current_dict = self.docs_last_m
-		prev_dict = {name: date_ for name, date_ in self.prev_file_list.items() if name in current_dict}
-		fresh_modified_files = prev_dict.items() ^ current_dict.items()
-		fresh_modified_files_names = set([name for name, date_ in fresh_modified_files])
-		self.indexes = [self.docs_og_names.index(name) for name in fresh_modified_files_names]
-		if fresh_modified_files:
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Found modified files!')
-		else:
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] No modified files found!')
+    def check_difference(self):
+        """
+        Сверяет данные "дата изменения" файлов с сайта с данными, сохраненными локально.
+        Предварительно проверяет, есть ли файл из локального списка на сайте.
+        Обновляет self.indexes номерами изменённых файлов.
+        """
+        current_dict = self.docs_last_m
+        prev_dict = {name: date_ for name, date_ in self.prev_file_list.items() if name in current_dict}
+        fresh_modified_files = prev_dict.items() ^ current_dict.items()
+        fresh_modified_files_names = set([name for name, date_ in fresh_modified_files])
+        self.indexes = [self.docs_og_names.index(name) for name in fresh_modified_files_names]
+        if fresh_modified_files:
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - На сайте найдены изменённые файлы!')
+        else:
+            pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Изменённых файлов на сайте не найдено!')
 
-	def dump_file_list(self):
-		"""
-		- creating data file in ./file_lists/ directory
-		"""
-		with open(f'./file_lists/{self.MAIN_TYPE}_{self.MAIN_NAME}_LM.txt', "w") as txt_file:
-			txt_file.write(str(self.docs_last_m))
-		print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] "Last modified" data updated!"')
+    def dump_file_list(self):
+        """
+        Создаёт текстовый файл с данным по дате изменения каждого из файлов со страницы.
+        """
+        with open(f'./file_lists/{self.data["section"]}_{self.data["grade"]}_LM.txt', "w") as txt_file:
+            txt_file.write(str(self.docs_last_m))
+        pars_logger.logger.info(f'{self.data["section"]}-{self.data["grade"]}-{self.diff_type[:-1]} - Данные об изменении файлов сохранены.')
 
 
 class Downloader(object):
-	def __init__(self, obj):
-		download_date = date.today()
-		self.last_dir = f'{download_date}_{obj.data["section"][:4]}_{obj.data["grade"]}_{obj.diff_type[:3].lower()}'
-		self.indexes = obj.indexes
-		self.MAIN_NAME	 = obj.MAIN_NAME
-		self.MAIN_TYPE = obj.MAIN_TYPE
-		self.docs_list = obj.docs_list
-		self.docs_links = obj.docs_links
-		self.docs_og_names = obj.docs_og_names
+    """
+    Создает папку, скачивает туда все файлы по индексам.
+    Между скачиваниями есть ожидания.
+    Обновляет текст для бота.
+    """
+    def __init__(self, obj):
+        pars_logger.logger.debug(f'{obj.data["section"]}-{obj.data["grade"]}-{obj.diff_type[:-1]} - Инициализация ')
+        download_date = date.today()
+        self.last_dir = f'./files/{download_date}_{obj.data["section"][:4]}_{obj.data["grade"]}_{obj.diff_type[:3].lower()}'
+        self.indexes = obj.indexes
+        self.docs_list = obj.docs_list
+        self.docs_links = obj.docs_links
+        self.docs_og_names = obj.docs_og_names
 
-		if not os.path.exists(self.last_dir):
-			os.mkdir(self.last_dir)
+        if not os.path.exists(self.last_dir):
+            os.mkdir(self.last_dir)
 
-		self.bot_status = f'\n\n{obj.data["section"]}, {obj.data["grade"]}\n\n{obj.diff_type}\n\n'
-		for i in self.indexes:
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] Downloading file #{i + 1}')
-			seed = randint(1, 1000)
-			file_mask = f'{self.MAIN_NAME}_{self.MAIN_TYPE}_{seed}_'
-			time_wait = uniform(1, 4)
-			time.sleep(time_wait)
-			file_name_short = file_mask + self.docs_og_names[i].replace(' ', '_').replace('"', '')
-			with open(f'./{self.last_dir}/{file_name_short}', 'wb') as new_file:
-				response = requests.get(self.docs_links[i])
-				new_file.write(response.content)
-			self.bot_status += f'{i+1}. {self.docs_list[i]} - {self.docs_og_names[i]}\n'
-			print(f'[{self.MAIN_NAME}] [{self.MAIN_TYPE}] [LOG] File #{i + 1} downloaded!')
+        self.bot_status = f'\n\n{obj.data["section"]}, {obj.data["grade"]}\n\n{obj.diff_type}\n\n'
+        for i in self.indexes:
+            pars_logger.logger.info(f'{obj.data["section"]}-{obj.data["grade"]}-{obj.diff_type[:-1]} - Скачиваем файл #{i + 1}')
+            seed = randint(1, 1000)
+            file_mask = f'{obj.data["grade"]}_{obj.data["section"]}_{seed}_'
+            time_wait = uniform(1, 4)
+            time.sleep(time_wait)
+            file_name_short = file_mask + self.docs_og_names[i].replace(' ', '_').replace('"', '')
+            with open(f'{self.last_dir}/{file_name_short}', 'wb') as new_file:
+                response = requests.get(self.docs_links[i])
+                new_file.write(response.content)
+            self.bot_status += f'{i+1}. {self.docs_list[i]} - {self.docs_og_names[i]}\n'
+            pars_logger.logger.info(f'{obj.data["section"]}-{obj.data["grade"]}-{obj.diff_type[:-1]} - Файл #{i + 1} скачен!')
+
+
+def start_pars():
+    """
+    Это плохо, но пока так.
+    Запускаем процесс, собираем данные для бота.
+
+    :return: Список с сообщениями
+    """
+    message_data = list()
+    for url in urls:
+        main_obj = Pars_Get_Info(url)
+        for obj in [Pars_New_Files(main_obj),Pars_Changed_Files(main_obj)]:
+            obj.get_previous_file_list()
+            if obj.prev_file_list: obj.check_difference()
+            if obj.indexes:
+                get_files = Downloader(obj)
+                obj.dump_file_list()
+                bot_status = get_files.bot_status
+                get_files.bot_status = ''
+                message_data.append([bot_status, get_files.last_dir])
+            elif obj.bot_status == '':
+                empty_text = f'{obj.data["section"]}, {obj.data["grade"]}\n' + \
+                             f'{obj.diff_type}' + \
+                             '\nНет обновлений!\n\n'
+                message_data.append([empty_text,])
+    return message_data

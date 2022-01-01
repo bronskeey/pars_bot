@@ -1,97 +1,184 @@
-#coding: utf-8
+# coding: utf-8
+# @school_updater_bot
+import schedule as schedule
+from threading import Thread
+from time import sleep
+from config import my_token, my_id
+from log.logging_module import *
+from pars_main import start_pars
 import telebot
-import logging
-from telebot import types
-# import random
-import os
-# import csv
-# from datetime import datetime
-from pars_main import Pars_Get_Info, Pars_Changed_Files, Pars_New_Files, Downloader
-import threading
+import sys
+bot_logger = Module_Logger(telebot.logger)
+bot_logger.logger.setLevel(logging.DEBUG)
+bot_logger.logger.handlers = [h for h in bot_logger.logger.handlers if isinstance(h, logging.FileHandler)]
+token = my_token
+bot = telebot.TeleBot(token)
+work_chat_link = 't.me/rcoi_tale'
 
-from config import my_pi, my_id
+# TODO: написать тестер через списки файлов
+# TODO: сделать конфиги для вольюма докера:
+#   - айди рабочего чата, админа
+#   - расписание
 
 
-#@pypeer_bot
-token = my_pi
-bot    = telebot.TeleBot(token)
-logger = telebot.logger
-telebot.logger.setLevel(logging.DEBUG)
-urls_organizers = ['http://rcoi.mcko.ru/organizers/info/gia-11/', 'http://rcoi.mcko.ru/organizers/info/gia-9/'] #
-urls_methodolog = ['http://rcoi.mcko.ru/organizers/methodological-materials/ege/', 'http://rcoi.mcko.ru/organizers/methodological-materials/gia-9/']
-urls = urls_organizers + urls_methodolog
-
-# REPEAT PARSE EVERY 'P_HOUR' HOURS
-P_HOUR = 24
-
-# TODO: separate this thing into two files
-# TODO: impement creating file lists w/o running the bot
-
-@bot.message_handler(commands=['start'])
-def start_command(message):
+@bot.message_handler(commands=['help'])
+def command_help(message):
     """
-    TODO: do not do that, implement basic start behaviour
-    TODO: create list of commands in bot
-
-     - calling 'welcome' function for the list of commands
+    Для администратора выдаёт стату и скрытые команды, для остальных текущую ситуацию в двух словах.
     """
-    welcome(message.chat.id)
-
-def welcome(id_c):
-    """
-    TODO: put this in a help command
-
-    """
-    start_string =\
-        f"/start - Show main menu\n"+\
-        f"/pars  - Start RCOI parser\n"+\
-        f"/random - Get a random number"
-    start_markup    = types.InlineKeyboardMarkup(row_width=2)
-    button_feedback = types.InlineKeyboardButton(text='Feedback', callback_data='start_button_feedback')
-    start_markup.add(
-        button_feedback)
-    bot.send_message(id_c, text = start_string, reply_markup = start_markup)
-
-
-@bot.message_handler(commands=['pars'])
-def pars_command(message):
+    bot_logger.logger.debug('/help')
     if message.from_user.id == int(my_id):
-        bot.send_message(message.chat.id, text='Начинаем упражнение', disable_notification=True)
-        start_pars(message)
-        bot.send_message(message.chat.id, text='Закончили упражнение', disable_notification=True)
+        log_folder_size = sum([os.stat('./log/'+file).st_size for file in os.listdir('./log/')])
+        log_folder_size_unit = 'КБ'
+        log_folder = [log_folder_size / 1024, log_folder_size_unit]
+        files_folder_size = sum(os.stat(os.path.join(dirpath,filename)).st_size for dirpath, dirnames, filenames in os.walk('./files/') for filename in filenames)
+        files_folder_size_unit = 'КБ'
+        files_folder = [files_folder_size / 1024, files_folder_size_unit]
+        for volume in [log_folder, files_folder]:
+            if volume[0] > 1024:
+                volume[0] /= 1024
+                volume[1] = 'МБ'
+        help_string = 'Привет, вот лист комманд:\n/_start, /_stop, /_get, /_get_logs, /_clean_files\n' \
+                      f'Сейчас:\n - размер логов {log_folder[0]:.2f} {log_folder[1]}\n - размер скачанных файлов {files_folder[0]:.2f} {files_folder[1]}'
     else:
-        bot.reply_to(message, text="Изивините, похоже, у вас нет прав на выполнение этой команды.")
-        print(f'{message.from_user.id} tried to start the parser')
+        help_string = f'Привет, этот бот работает в канале {work_chat_link}, четыре раза в день проверяет неназванный сайт и рассказывает, что там новенького.' \
+                      f'Расписание: 07:00, 10:00, 17:00, 23:00'
+    bot.send_message(message.chat.id, text = help_string)
 
 
-def start_pars(message):
-    for url in urls:
-        main_obj = Pars_Get_Info(url)
-        for obj in [Pars_New_Files(main_obj),Pars_Changed_Files(main_obj)]:
-            obj.get_previous_file_list()
-            if obj.prev_file_list: obj.check_difference()
-            if obj.indexes:
-                get_new_files = Downloader(obj)
-                obj.dump_file_list()
-                bot_status = get_new_files.bot_status
-                bot.send_message(message.chat.id, text=bot_status)
-                data_dir = f'./{get_new_files.last_dir}/'
+@bot.message_handler(commands=['_get_logs'])
+def adm_command_get_logs(message):
+    """
+    Только для администратора: присылает два лог-файла
+    """
+    bot_logger.logger.debug('/_get_logs')
+    if message.from_user.id == int(my_id):
+        log_path = bot_logger.log_folder
+        log_list = [file for file in os.listdir(log_path) if file.endswith(".txt")]
+        try:
+            for file in log_list:
+                with open(log_path + file, 'rb') as f:
+                    bot.send_document(message.chat.id, f)
+        except Exception as e:
+            frame = traceback.extract_tb(sys.exc_info()[2])
+            line_no = str(frame[0]).split()[4]
+            bot_logger.error_log(line_no)
+            bot.send_message(my_id, text=f'У нас ошибка, не смогли отправить логи.\nОшибка: {e}')
+    else:
+        pass
+
+
+@bot.message_handler(commands=['_clean_files'])
+def adm_command_clean_files(message):
+    """
+    Только для администратора: удаляет скачанные файлы
+    """
+    import shutil
+    bot_logger.logger.debug('/_clean_files')
+    if message.from_user.id == int(my_id):
+        try:
+            files_path = './files/'
+            shutil.rmtree(files_path)
+            os.mkdir(files_path)
+            bot.send_message(message.chat.id, text='Файлы удалены.')
+        except OSError as e:
+            bot_logger.logger.error(f"Error: {e.filename} - {e.strerror}.")
+            bot.send_message(my_id, text=f'У нас ошибка, не смогли удалить файлы.\n{e.filename} - {e.strerror}')
+        except Exception as e:
+            frame = traceback.extract_tb(sys.exc_info()[2])
+            line_no = str(frame[0]).split()[4]
+            bot_logger.error_log(line_no)
+            bot.send_message(my_id, text=f'У нас ошибка, не смогли удалить файлы.\n{e}')
+    else:
+        pass
+
+
+@bot.message_handler(commands=['_stop'])
+def command_stop(message):
+    """
+    Останавливает все задачи из расписания
+    """
+    bot_logger.logger.debug('/_stop')
+    if message.from_user.id == int(my_id):
+        schedule.clear()
+        bot.send_message(message.chat.id, 'Задачи остановлены')
+    else:
+        pass
+
+
+@bot.message_handler(commands=['_get'])
+def command_stop(message):
+    """
+    Останавливает все задачи из расписания
+    """
+    bot_logger.logger.debug('/_get')
+    if message.from_user.id == int(my_id):
+        all_jobs = schedule.get_jobs()
+        bot.send_message(message.chat.id, text=str(all_jobs))
+    else:
+        pass
+
+
+@bot.message_handler(commands=['_start'])
+def command_start(message):
+    """
+    Запускает расписание
+    """
+    bot_logger.logger.debug('/_start')
+    if message.from_user.id == int(my_id):
+        schedule.every().day.at("07:00").do(action, message)
+        schedule.every().day.at("10:00").do(action, message)
+        schedule.every().day.at("17:00").do(action, message)
+        schedule.every().day.at("23:00").do(action, message)
+        Thread(target=schedule_checker).start()
+        bot.send_message(message.chat.id, 'Задачи запущены')
+    else:
+        pass
+
+
+def action(msg):
+    """
+    Запускает общение с парсером. Получает от него список с сообщениями двух типов:
+    1) из 2 элементов -- сообщение + файлы
+    2) из 1 элемента -- нет обновлений
+    TODO: собирать "нет обновлений" из всех разделов в одно сообщение, выводить последним
+    """
+    try:
+        bot.send_message(msg.chat.id, text='Начинаем упражнение', disable_notification=True)
+        bot_logger.logger.debug('Парсер начал работу')
+        messages = start_pars()
+    except Exception as e:
+        frame = traceback.extract_tb(sys.exc_info()[2])
+        line_no = str(frame[0]).split()[4]
+        bot_logger.error_log(line_no)
+        bot.send_message(msg.chat.id, text="Извините, что-то сломалось. Админу сообщили, скоро всё починим.")
+        bot.send_message(my_id, text=f'У нас ошибка, парсер не запустился.\n{e}')
+    else:
+        for msg_data in messages:
+            if len(msg_data) == 2:
+                bot.send_message(msg.chat.id, text=msg_data[0])
+                data_dir = f'{msg_data[1]}/'
                 file_list = os.listdir(data_dir)
                 for file in file_list:
                     try:
                         with open(data_dir + file, 'rb') as f:
-                            bot.send_document(message.chat.id, f)
-                            get_new_files.bot_status = ''
-                    except Exception:
-                        bot.send_message(message.chat.id, text="Something went wrong. I can't send you the files.")
-            elif obj.bot_status == '':
-                empty_text = f'{obj.data["section"]}, {obj.data["grade"]}\n' + \
-                             f'{obj.diff_type}' + \
-                             '\nНет обновлений!\n\n'
-                status = empty_text
-                bot.send_message(message.chat.id, text=status, disable_notification=True)
+                            bot.send_document(msg.chat.id, f)
+                    except Exception as e:
+                        frame = traceback.extract_tb(sys.exc_info()[2])
+                        line_no = str(frame[0]).split()[4]
+                        bot_logger.error_log(line_no)
+                        bot.send_message(msg.chat.id, text="Извините, что-то сломалось, я не смог отправить вам файл. Админу сообщили, скоро всё починим.")
+                        bot.send_message(my_id, text=f'У нас ошибка, не смогли отправить файл.\n{e}')
+            elif len(msg_data) == 1:
+                bot.send_message(msg.chat.id, text=msg_data[0], disable_notification=True)
+        bot.send_message(msg.chat.id, text='Закончили упражнение', disable_notification=True)
+        bot_logger.logger.debug('Парсер закончил работу')
 
-
-    threading.Timer(P_HOUR * 60 * 60, start_pars, args=[message, ]).start()
+def schedule_checker():
+    # TODO: это не очень красиво, может заменить скедулер
+    while True:
+        schedule.run_pending()
+        sleep(1)
 
 bot.polling(none_stop=True)
+
